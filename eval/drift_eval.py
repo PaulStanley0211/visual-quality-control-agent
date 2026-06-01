@@ -5,9 +5,10 @@ Methodology (honest, seeded, small-sample-aware):
     (built on ``train/good``), so distances aren't artificially deflated.
   * Synthesize drift by perturbing copies of the clean images: brightness, contrast, gaussian blur,
     gaussian noise, JPEG compression (each at seeded severities).
-  * Calibrate the OOD threshold on a seeded clean calibration split to bound the clean false-alarm
-    rate at ``settings.drift_far_alarm_target``; report the alarm rate on the disjoint clean holdout
-    with a Wilson 95% upper bound.
+  * Calibrate the OOD threshold on a leakage-free leave-one-out sample of the training-good reference
+    (large, in-distribution) to bound the clean false-alarm rate at ``settings.drift_far_alarm_target``;
+    report the alarm rate on the disjoint test/good holdout with 1/n granularity and a Wilson 95% upper
+    bound (small-sample honest, mirroring eval/perception_eval.py).
   * Report separability AUROC (clean vs drifted), per-perturbation detection rate, and the PSI
     reference bins consumed by drift/report.py.
 
@@ -31,9 +32,6 @@ from sklearn.metrics import roc_auc_score
 from config import settings
 from drift.reference import load_reference
 from drift.scoring import knn_distance
-
-CALIBRATION_FRACTION = 0.5
-
 
 def _perturbations(rng: np.random.Generator) -> dict:
     """Name -> function(img: PIL.Image) -> PIL.Image. Deterministic given the seeded rng."""
