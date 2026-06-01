@@ -1,8 +1,10 @@
 """Population-level drift monitor: windowed PSI + %OOD over the MES.
 
-Reads the most recent inspections that carry a drift score (the real processed-image stream;
-synthetic 'qc' seed rows have NULL drift_score and are excluded) and compares their score
-distribution to the calibrated reference distribution via PSI.
+Reads the most recent non-defective inspections that carry a drift score (the good-part stream;
+synthetic 'qc' seed rows have NULL drift_score and are excluded). Defective parts sit far from
+the training-good manifold by construction, so including their scores would let a spike of
+genuine defects masquerade as input drift. The PSI reference is built from clean good images,
+so the live good stream is the apples-to-apples comparison.
 
 Run:  uv run python -m drift.report
 """
@@ -20,7 +22,7 @@ def _recent_scores(conn, window: int) -> list[float]:
     rows = conn.execute(
         """
         SELECT drift_score FROM inspections
-        WHERE drift_score IS NOT NULL
+        WHERE drift_score IS NOT NULL AND is_defective = 0
         ORDER BY ts DESC, inspection_id DESC
         LIMIT ?
         """,

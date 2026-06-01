@@ -98,3 +98,30 @@ def test_population_report_empty_when_no_drift_scores(tmp_path):
         assert report["band"] == "no-data"
     finally:
         conn.close()
+
+
+def _insert_defective(conn, part_id, score):
+    conn.execute(
+        """INSERT INTO inspections (part_id, ts, is_defective, drift_score, source)
+           VALUES (?, '2026-06-01T00:00:00+00:00', 1, ?, 'agent')""",
+        (part_id, score),
+    )
+
+
+def test_population_report_excludes_defective_parts(tmp_path):
+    db = tmp_path / "mes.db"
+    seed_module.seed(db, verbose=False)
+    conn = mes.connect(db)
+    try:
+        # 5 good in-distribution parts (low score) + 10 defective parts (high score).
+        for i in range(5):
+            _insert(conn, "SCN-GOOD-1", 0.2)
+        for i in range(10):
+            _insert_defective(conn, "SCN-SYSMACH-1", 9.0)
+        conn.commit()
+        report = population_report(conn, window=50, metrics=_METRICS)
+        # Only the 5 good parts are counted; the defective parts are excluded.
+        assert report["n"] == 5
+        assert report["frac_ood"] == 0.0   # the good parts are all in-distribution (score 0.2 < threshold 1.0)
+    finally:
+        conn.close()
