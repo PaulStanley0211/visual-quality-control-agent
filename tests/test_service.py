@@ -20,6 +20,11 @@ def _ready() -> bool:
 
 requires = pytest.mark.skipif(not _ready(), reason="needs trained model + seeded MES (perception.train + memory.seed)")
 
+requires_drift = pytest.mark.skipif(
+    not settings.drift_metrics_path.exists(),
+    reason="needs drift calibration (run drift.reference + eval.drift_eval)",
+)
+
 
 @pytest.fixture(scope="module")
 def client():
@@ -68,7 +73,7 @@ def test_health_exposes_drift_fields(client):
     assert "drift_reference_present" in body
 
 
-@requires
+@requires_drift
 def test_drift_report_endpoint(client):
     r = client.get("/drift")
     assert r.status_code == 200

@@ -2,6 +2,7 @@
 
 POST /inspect  (multipart: part_id + image)  -> InspectionOutput JSON
 GET  /health                                 -> readiness + active config
+GET  /drift                                  -> windowed PSI + %OOD drift report
 
 The compiled LangGraph (real PatchCore detector + MES) is built once at startup;
 the MES is seeded on first run if empty. The confidence threshold and LLM provider
