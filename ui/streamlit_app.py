@@ -155,8 +155,11 @@ with col_out:
                 )
             else:
                 st.success(f"✅ Input in-distribution (drift score {d.drift_score:.3f} < threshold {d.threshold:.3f}).")
+            def _fmt(v):
+                return f"{v:+.1f}σ" if v is not None else "n/a"
+
             st.caption(
-                f"Brightness {d.brightness_delta:+.1f}σ · Contrast {d.contrast_delta:+.1f}σ · Sharpness {d.sharpness_delta:+.1f}σ "
+                f"Brightness {_fmt(d.brightness_delta)} · Contrast {_fmt(d.contrast_delta)} · Sharpness {_fmt(d.sharpness_delta)} "
                 "(vs training baseline)"
             )
 
