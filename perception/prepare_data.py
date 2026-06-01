@@ -28,8 +28,8 @@ from config import settings
 # images/<split>/<category>/... and masks/test/<category>/...).
 HF_REPO_ID = "TheoM55/mvtec_anomaly_detection"
 
-# Expected official counts for `bottle` — a sanity check that the fetch is complete.
-EXPECTED_TRAIN_GOOD = {"bottle": 209}
+# Expected official train/good counts per category — a sanity check that the fetch is complete.
+EXPECTED_TRAIN_GOOD = {"bottle": 209, "hazelnut": 391}
 
 
 def _category_root() -> Path:

@@ -34,8 +34,9 @@ from lightning.pytorch import seed_everything
 from config import settings
 from perception.detector import _to_scalar, load_inferencer
 
-# PatchCore image-level AUROC on MVTec bottle from the original paper (Roth et al., 2022).
-PUBLISHED_AUROC_BASELINE = {"bottle": 1.000}
+# PatchCore image-level AUROC from the original paper (Roth et al., 2022, "Towards Total Recall
+# in Industrial Anomaly Detection"). Both bottle and hazelnut are reported at 100.0%.
+PUBLISHED_AUROC_BASELINE = {"bottle": 1.000, "hazelnut": 1.000}
 
 # Fraction of each class used to CALIBRATE the threshold; the rest is held out for reporting.
 CALIBRATION_FRACTION = 0.5

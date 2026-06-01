@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     category: str = "bottle"
     image_size: int = 256  # matches anomalib's PatchCore pre-processor default (train + inference resize)
     backbone: str = "resnet18"  # lighter than the wide_resnet50_2 default; keeps CPU fit/inference fast
+    # PatchCore memory-bank coreset fraction. anomalib's default is 0.1; the paper shows ~1% ("PatchCore-1%")
+    # gives near-identical AUROC at a fraction of the fit/inference cost (greedy selection scales with it).
+    coreset_sampling_ratio: float = 0.1
 
     # --- compute (threaded into the training Engine; override for GPU hosts) ---
     accelerator: str = "cpu"  # lightning accelerator: "cpu" | "gpu" | "auto"
@@ -53,7 +56,8 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1"
     # The Anthropic SDK's standard credential (read from env or .env). validation_alias bypasses the
     # VQC_ prefix so it picks up the conventional ANTHROPIC_API_KEY name; None lets the SDK self-resolve.
-    anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    # SecretStr so the key never appears in logs / repr / settings dumps; unwrap with get_secret_value().
+    anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
     # --- service ---
     max_upload_mb: int = 15  # reject uploads larger than this (memory-exhaustion guard)
@@ -63,8 +67,13 @@ class Settings(BaseSettings):
 
     @property
     def perception_dir(self) -> Path:
-        """Where the trained PatchCore checkpoint, exported model, and metrics live."""
-        return self.artifacts_dir / "perception"
+        """Where the trained PatchCore checkpoint, exported model, and metrics live.
+
+        Scoped per category so multiple trained models (e.g. bottle + hazelnut) coexist;
+        switch the active one with ``VQC_CATEGORY``. The detector cross-checks that the
+        loaded calibration matches ``settings.category``.
+        """
+        return self.artifacts_dir / "perception" / self.category
 
     @property
     def heatmaps_dir(self) -> Path:

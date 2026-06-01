@@ -47,6 +47,7 @@ def train() -> Path:
         backbone=settings.backbone,
         layers=["layer2", "layer3"],
         pre_trained=True,
+        coreset_sampling_ratio=settings.coreset_sampling_ratio,
     )
 
     engine = Engine(

@@ -5,10 +5,10 @@
 .env
 *.env
 datasets/
-# Keep the deployable model (artifacts/perception/weights/torch/model.pt) + metrics.json,
-# but drop the training-only Lightning checkpoint and the eval plot.
-artifacts/perception/Patchcore/
-artifacts/perception/threshold_tradeoff.png
+# Keep the deployable model (artifacts/perception/<category>/weights/torch/model.pt) + metrics.json,
+# but drop the training-only Lightning checkpoint and the eval plot. Artifacts are per-category.
+artifacts/perception/*/Patchcore/
+artifacts/perception/*/threshold_tradeoff.png
 artifacts/heatmaps/
 artifacts/agent_eval_mes.db
 artifacts/agent_metrics.json

@@ -12,6 +12,7 @@ Provider failures never abort an inspection: ``agent.nodes.make_reason_node`` wr
 from __future__ import annotations
 
 import json
+import threading
 from typing import Protocol, runtime_checkable
 
 from config import settings
@@ -138,14 +139,22 @@ class AnthropicProvider:
 
     def __init__(self) -> None:
         self._client = None  # lazily constructed so stub-only runs never import anthropic
+        self._lock = threading.Lock()  # one provider is shared across the service threadpool
 
     def _get_client(self):
+        # Double-checked locking: the service shares one provider across threadpool workers, so a
+        # naive check-then-set could build the client twice under the first concurrent burst.
         if self._client is None:
-            import anthropic  # lazy: only needed when this provider is actually selected
+            with self._lock:
+                if self._client is None:
+                    import anthropic  # lazy: only needed when this provider is actually selected
 
-            # api_key=None lets the SDK self-resolve from the environment; settings reads it from
-            # ANTHROPIC_API_KEY (env or .env), so a key placed in .env works without exporting it.
-            self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+                    # api_key=None lets the SDK self-resolve from the environment; settings reads it
+                    # from ANTHROPIC_API_KEY (env or .env), so a key in .env works without exporting it.
+                    key = settings.anthropic_api_key
+                    self._client = anthropic.Anthropic(
+                        api_key=key.get_secret_value() if key else None
+                    )
         return self._client
 
     def reason(self, facts: dict) -> ReasoningOutput:
