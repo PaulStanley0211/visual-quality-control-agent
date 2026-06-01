@@ -1,5 +1,5 @@
-"""The LangGraph inspection loop: detect -> gather_context -> investigate -> decide
--> reason -> (act | escalate).
+"""The LangGraph inspection loop: detect -> assess_drift -> gather_context -> investigate
+-> decide -> reason -> (act | escalate).
 
 ``build_graph`` compiles the state machine with injected dependencies;
 ``run_inspection`` invokes it for one part and returns the schema-validated

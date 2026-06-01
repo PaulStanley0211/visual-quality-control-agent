@@ -1,5 +1,5 @@
-"""LangGraph nodes for the inspection loop: detect -> gather_context -> investigate
--> decide -> reason -> act | escalate.
+"""LangGraph nodes for the inspection loop: detect -> assess_drift -> gather_context
+-> investigate -> decide -> reason -> act | escalate.
 
 Deterministic dispositions come from ``agent.decisions``; only the narrative comes
 from the LLM (``deps.provider``). Every node appends to the reasoning trace, and the

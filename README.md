@@ -58,7 +58,7 @@ uv run python -m eval.perception_eval
 uv run python -m memory.seed
 uv run python -m eval.agent_eval
 
-uv run python -m pytest                       # 53 tests
+uv run python -m pytest                       # 88 tests
 
 # Serve / demo
 uv run uvicorn service.app:app --port 8000        # POST /inspect, GET /health, GET /drift
