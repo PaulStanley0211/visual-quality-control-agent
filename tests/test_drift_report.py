@@ -47,3 +47,54 @@ def test_migrate_adds_drift_score_to_legacy_table(tmp_path):
         assert "drift_score" in cols
     finally:
         conn.close()
+
+
+from drift.report import population_report
+
+_METRICS = {
+    "category": "bottle",
+    "operating_threshold": 1.0,
+    "psi_reference": {
+        # Two bins split at the threshold; reference is mostly in-distribution (low scores).
+        "bin_edges": [0.0, 1.0, 100.0],
+        "expected_props": [0.9, 0.1],
+    },
+}
+
+
+def _insert(conn, part_id, score):
+    conn.execute(
+        """INSERT INTO inspections (part_id, ts, is_defective, drift_score, source)
+           VALUES (?, '2026-06-01T00:00:00+00:00', 0, ?, 'agent')""",
+        (part_id, score),
+    )
+
+
+def test_population_report_flags_significant_drift(tmp_path):
+    db = tmp_path / "mes.db"
+    seed_module.seed(db, verbose=False)
+    conn = mes.connect(db)
+    try:
+        # All recent processed images are high-score (drifted) — far from the reference's 90/10 split.
+        for i in range(20):
+            _insert(conn, "SCN-GOOD-1", 5.0)
+        conn.commit()
+        report = population_report(conn, window=20, metrics=_METRICS)
+        assert report["n"] == 20
+        assert report["frac_ood"] == 1.0           # every score >= threshold 1.0
+        assert report["psi"] > 0.25                 # large divergence
+        assert report["band"] == "significant"
+    finally:
+        conn.close()
+
+
+def test_population_report_empty_when_no_drift_scores(tmp_path):
+    db = tmp_path / "mes.db"
+    seed_module.seed(db, verbose=False)   # seed rows are 'qc' with NULL drift_score
+    conn = mes.connect(db)
+    try:
+        report = population_report(conn, window=50, metrics=_METRICS)
+        assert report["n"] == 0
+        assert report["band"] == "no-data"
+    finally:
+        conn.close()
