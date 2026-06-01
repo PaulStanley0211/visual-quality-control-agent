@@ -136,7 +136,12 @@ def decide(state: InspectionState) -> dict:
     eff_diag_conf = inv["diagnosis_confidence"] if pattern_relevant else 1.0
     conf_low = decisions.should_escalate(dr.confidence, eff_diag_conf, settings.confidence_threshold)
     drift = state.get("drift")
-    drift_ood = bool(drift and drift.is_ood)
+    # Drift escalation guards the PASS path against silent false-accepts from out-of-distribution
+    # operating conditions (lighting / camera / part-variant shift). A part already detected as
+    # defective is far from the training-good manifold *by virtue of its defect*, so its drift score
+    # is not a distribution-shift signal and must not suppress the defect's corrective actions — the
+    # defect disposition governs there.
+    drift_ood = bool(drift and drift.is_ood and not dr.is_defective)
     escalated = conf_low or severity_unknown or drift_ood
     routing_conf = min(dr.confidence, eff_diag_conf)
 
