@@ -61,7 +61,7 @@ uv run python -m eval.agent_eval
 uv run python -m pytest                       # 53 tests
 
 # Serve / demo
-uv run uvicorn service.app:app --port 8000        # POST /inspect, GET /health
+uv run uvicorn service.app:app --port 8000        # POST /inspect, GET /health, GET /drift
 uv run streamlit run ui/streamlit_app.py          # interactive demo
 docker build -t vqc-agent -f service/Dockerfile . && docker run -p 8000:8000 vqc-agent
 ```
@@ -102,12 +102,36 @@ ui/           Streamlit demo
 tests/        unit, regression, escalation, reasoning
 ```
 
+## Drift monitoring
+
+A `drift/` package watches whether incoming images still resemble the training-good distribution, guarding the pass path against silent false-accepts when the camera, lighting, or part variant shifts.
+
+- **Per-image OOD gate** — each part image is scored by kNN distance to a per-category reference embedding set (ImageNet resnet18 backbone, decoupled from anomalib). Non-defective parts that score above the calibrated threshold are escalated to a human; the drift read is annotated on every inspection regardless of escalation. Defective parts are excluded from drift escalation — a defect is naturally far from the training-good manifold, so its drift score is not a distribution-shift signal.
+- **MES-backed population monitor** — per-inspection drift scores are stored in SQLite; `drift/report.py` computes a windowed PSI over the non-defective (good) stream and reports % OOD parts and image-stat trends.
+- **Optional / per-category** — absent the reference artifact, the feature is simply off. Artifacts live under `artifacts/drift/<category>/`, parallel to `artifacts/perception/<category>/`, and are switched by `VQC_CATEGORY`.
+
+**Validated numbers** (leave-one-out calibration on training-good + disjoint holdout, Wilson CI — same methodology as perception):
+
+| Category | Separability AUROC | Calibration false-alarm | All perturbations detected |
+|---|---|---|---|
+| `bottle` | **1.000** | 5.3% (LOO, n=209) | **100%** (brightness↑↓, contrast, blur, noise, JPEG) |
+| `hazelnut` | **0.997** | 5.1% (LOO, n=391) | 100% except blur (82.5%) |
+
+```bash
+uv run python -m drift.reference     # build per-category reference (after perception.train)
+uv run python -m eval.drift_eval     # calibrate threshold → drift_metrics.json + plot
+uv run python -m drift.report        # windowed PSI + %OOD report over the live MES good stream
+# per category: VQC_CATEGORY=hazelnut uv run python -m drift.reference   (etc.)
+```
+
+Service: `GET /drift` returns the windowed report as JSON; `GET /health` now also reports `drift_enabled` and `drift_reference_present`.
+
 ## Limitations
 
 - The MES is synthetic-but-realistic; the query interface is built to mirror a real MES (the production path).
 - Few defect samples → a 2% false-accept rate can't be *statistically certified* on held-out data; metrics carry their sampling uncertainty.
 - Single-station scope; multi-station orchestration and logical anomalies (MVTec LOCO AD) are natural extensions.
-- Vision accuracy degrades under lighting / camera / part drift; continuous input monitoring and periodic retraining are required in production.
+- Vision accuracy degrades under lighting / camera / part drift; the drift monitor detects image-level OOD shifts and escalates for human review, but continuous retraining is still required in production to restore validated accuracy.
 
 ## Attribution
 
