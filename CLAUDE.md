@@ -19,6 +19,7 @@ Goal (inspect and resolve) -> Plan (route by state) -> Act (invoke tools) -> Obs
 - Package manager: uv (exclusive; locked dependencies, reproducible builds).
 - Orchestration: LangGraph. Perception: Anomalib (PatchCore) on PyTorch.
 - Reasoning: an offline deterministic stub is the default (no key/GPU needed); a hosted Anthropic (Claude) provider — wired via structured outputs — or a local Ollama model plugs in via `VQC_LLM_PROVIDER` (+ `ANTHROPIC_API_KEY` in `.env`). Dispositions stay deterministic regardless of provider.
+- Drift monitoring: self-owned ImageNet resnet18 backbone (decoupled from anomalib); kNN distance to a per-category training-good reference set; optional — off until the reference is built.
 - Data: MVTec AD (CC BY-NC-SA 4.0, non-commercial — credited, not redistributed).
 - Contracts / IO: Pydantic. Service: FastAPI + Docker. UI: Streamlit. Tracing: LangSmith (optional).
 - Reproducibility: fixed random seeds and pinned dataset splits across training and evaluation.
@@ -40,6 +41,7 @@ ui/           Streamlit demo
 - When `.env` sets `VQC_LLM_PROVIDER=anthropic`, run the suite hermetically: `VQC_LLM_PROVIDER=stub uv run python -m pytest` (avoids a live API call in the service test).
 - Perception artifacts are per-category under `artifacts/perception/<category>/`; switch with `VQC_CATEGORY`. `VQC_CORESET_SAMPLING_RATIO` (default 0.1) tunes PatchCore fit cost — `0.01` ("PatchCore-1%") trains ~10x faster at ~the same AUROC.
 - anomalib's MVTec downloader 404s; `perception/prepare_data.py` fetches the active category from a Hugging Face mirror (idempotent).
+- Drift artifacts live under `artifacts/drift/<category>/` (`reference.npz`, `drift_metrics.json`, `drift_separation.png`), parallel to `artifacts/perception/<category>/`. Build with `uv run python -m drift.reference` (after `perception.train`) then `uv run python -m eval.drift_eval`; switch category via `VQC_CATEGORY`. OOD good parts are escalated to a human; the feature is optional — off until the reference is built. `drift.report` reads the non-defective (good) stream from the MES.
 - Windows: prefix non-ASCII-printing scripts with `PYTHONUTF8=1`; in the Bash tool `unset VIRTUAL_ENV` first to silence a stale-venv uv warning.
 
 ## Plan (end to end)
@@ -67,7 +69,7 @@ ui/           Streamlit demo
 ## Monitor
 - Structured decision logs with full reasoning trace.
 - False-accept / false-reject tracked continuously against the error budget.
-- Input-distribution drift check against the training set (extension; flagged as future work if scope-limited).
+- Input-distribution drift monitoring: IMPLEMENTED. Per-image kNN OOD gate on the pass path (non-defective parts scoring far from the training-good manifold are escalated to a human), plus an MES-backed PSI population monitor over the good stream. Validated: `bottle` AUROC 1.000 / `hazelnut` AUROC 0.997; calibration false-alarm ~5% (LOO). See `drift/` and `eval/drift_eval.py`.
 
 ## Slide / Demo
 One-screen summary: problem, architecture diagram, perception and agent validation results versus error budget, live inspection demo.
@@ -78,5 +80,5 @@ One-screen summary: problem, architecture diagram, perception and agent validati
 
 ## Limitations and Future Work
 - The MES is synthetic-but-realistic; the query interface is designed for real MES integration, which is the path to production.
-- Vision accuracy degrades under lighting, camera, or part-variant drift; continuous input monitoring and periodic retraining are required in a live deployment.
+- Vision accuracy degrades under lighting, camera, or part-variant drift; input-distribution drift monitoring is now implemented (image-level OOD detection via kNN to the training-good manifold), escalating suspect images to a human. Continuous retraining when drift is confirmed remains the production path to restoring validated accuracy.
 - Single-station scope; per-category models are supported and demonstrated on `bottle` + `hazelnut`, but multi-station orchestration and logical-anomaly handling (MVTec LOCO AD) remain natural extensions.

@@ -1,5 +1,5 @@
-"""LangGraph nodes for the inspection loop: detect -> gather_context -> investigate
--> decide -> reason -> act | escalate.
+"""LangGraph nodes for the inspection loop: detect -> assess_drift -> gather_context
+-> investigate -> decide -> reason -> act | escalate.
 
 Deterministic dispositions come from ``agent.decisions``; only the narrative comes
 from the LLM (``deps.provider``). Every node appends to the reasoning trace, and the
@@ -47,6 +47,31 @@ def make_detect_node(deps: AgentDeps):
         }
 
     return detect
+
+
+# --- assess_drift (input-distribution OOD gate) ---
+
+def make_assess_drift_node(deps: AgentDeps):
+    def assess_drift(state: InspectionState) -> dict:
+        if not settings.drift_enabled:
+            return {}
+        monitor = deps.get_drift_monitor()
+        if monitor is None:
+            return {}  # feature off / artifact absent -> drift stays None
+        image_path = state.get("image_path")
+        if not image_path:
+            return {"reasoning_trace": ["Drift: not assessed (no image provided)."]}
+        try:
+            dr = monitor.score(image_path)
+        except Exception as e:  # noqa: BLE001 - the gate's availability must never abort an inspection
+            logger.warning("Drift scoring failed for part '%s': %s", state["part_id"], e)
+            return {"reasoning_trace": [f"Drift: unavailable ({e})."]}
+        return {
+            "drift": dr,
+            "reasoning_trace": [f"Drift: {dr.note} (score {dr.drift_score:.3f}, OOD={dr.is_ood})."],
+        }
+
+    return assess_drift
 
 
 # --- gather_context (read long-term memory) ---
@@ -109,13 +134,27 @@ def decide(state: InspectionState) -> dict:
     # changes the disposition (i.e. a non-severe defect). Otherwise the pattern is irrelevant.
     pattern_relevant = decisions.pattern_affects_disposition(dr.is_defective, severe)
     eff_diag_conf = inv["diagnosis_confidence"] if pattern_relevant else 1.0
-    escalated = decisions.should_escalate(dr.confidence, eff_diag_conf, settings.confidence_threshold) or severity_unknown
+    conf_low = decisions.should_escalate(dr.confidence, eff_diag_conf, settings.confidence_threshold)
+    drift = state.get("drift")
+    # Drift escalation guards the PASS path against silent false-accepts from out-of-distribution
+    # operating conditions (lighting / camera / part-variant shift). A part already detected as
+    # defective is far from the training-good manifold *by virtue of its defect*, so its drift score
+    # is not a distribution-shift signal and must not suppress the defect's corrective actions — the
+    # defect disposition governs there.
+    drift_ood = bool(drift and drift.is_ood and not dr.is_defective)
+    escalated = conf_low or severity_unknown or drift_ood
     routing_conf = min(dr.confidence, eff_diag_conf)
 
     trace = f"Decision: {disposition.value} (routing confidence {routing_conf:.2f})."
     if escalated:
-        why = "unknown severity (no anomaly extent)" if severity_unknown else "confidence below threshold"
-        trace += f" Escalate to human: {why}."
+        reasons = []
+        if conf_low:
+            reasons.append("confidence below threshold")
+        if severity_unknown:
+            reasons.append("unknown severity (no anomaly extent)")
+        if drift_ood:
+            reasons.append("image out-of-distribution (drift)")
+        trace += " Escalate to human: " + "; ".join(reasons) + "."
     return {
         "decision": Decision(disposition=disposition, confidence=round(routing_conf, 4)),
         "escalated": escalated,
@@ -236,7 +275,7 @@ def make_escalate_node(deps: AgentDeps):
     def escalate(state: InspectionState) -> dict:
         decision = state["decision"]
         actions = Actions()  # all held
-        new_trace = ["Escalated to human reviewer (confidence below threshold); automated actions held."]
+        new_trace = ["Escalated to human reviewer; automated actions held."]
         conn = deps.connect()
         try:
             with conn:
@@ -264,12 +303,14 @@ def _build_output(
         escalated=escalated,
         summary=state.get("summary", ""),
         heatmap_path=dr.heatmap_path if dr else None,
+        drift=state.get("drift"),
         reasoning_trace=full_trace,
     )
 
 
 def _record(conn, state: InspectionState, decision: Decision, actions: Actions, escalated: bool) -> None:
     dr = state["detect_result"]
+    drift = state.get("drift")
     inv = state.get("investigation", {})
     diagnosis = state.get("diagnosis")
     mes.record_inspection(
@@ -278,6 +319,7 @@ def _record(conn, state: InspectionState, decision: Decision, actions: Actions, 
         is_defective=dr.is_defective,
         confidence=dr.confidence,
         anomaly_score=dr.anomaly_score,
+        drift_score=drift.drift_score if drift else None,
         defect_type=diagnosis.defect_type if diagnosis else None,
         disposition=decision.disposition.value,
         fault_pattern=inv.get("fault_pattern"),
