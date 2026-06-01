@@ -13,6 +13,12 @@ from pathlib import Path
 
 import streamlit as st
 
+# `streamlit run ui/streamlit_app.py` puts ui/ (not the repo root) on sys.path, so the
+# first-party packages aren't importable by default. Add the project root regardless of CWD.
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from agent.graph import build_graph, run_inspection
 from agent.state import AgentDeps
 from memory import mes
