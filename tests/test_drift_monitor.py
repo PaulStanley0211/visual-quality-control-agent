@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from config import settings
@@ -50,7 +51,8 @@ def test_stat_deltas_reported_in_sigma_units():
     m = DriftMonitor(reference=_reference(), threshold=2.0, extractor=_FakeExtractor([0.0, 0.0, 0.0, 0.0]))
     res = m.score(_img())  # flat 128 image: brightness 128 == baseline mean => 0σ
     assert res.brightness_delta == 0.0
-    assert res.contrast_delta is not None and res.sharpness_delta is not None
+    assert res.contrast_delta == pytest.approx(-6.0, abs=0.01)
+    assert res.sharpness_delta == pytest.approx(-10.0, abs=0.01)
 
 
 def test_category_mismatch_rejected():

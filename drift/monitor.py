@@ -20,9 +20,6 @@ from drift.reference import Reference, load_reference
 from drift.scoring import knn_distance
 from drift.stats import image_stats
 
-_STAT_LABELS = {"brightness": "brightness", "contrast": "contrast", "sharpness": "sharpness"}
-
-
 def _load_threshold() -> float:
     """Read the calibrated OOD threshold from drift_metrics.json (written by eval.drift_eval)."""
     path = settings.drift_metrics_path
@@ -48,7 +45,7 @@ def _describe(is_ood: bool, deltas: dict[str, float]) -> str:
         return "In-distribution"
     key = max(deltas, key=lambda k: abs(deltas[k]))
     direction = "up" if deltas[key] >= 0 else "down"
-    return f"OOD: {_STAT_LABELS[key]} {direction} {abs(deltas[key]):.1f}σ"
+    return f"OOD: {key} {direction} {abs(deltas[key]):.1f}σ"
 
 
 class DriftMonitor:
