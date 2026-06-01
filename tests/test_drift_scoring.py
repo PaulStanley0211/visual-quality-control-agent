@@ -33,3 +33,41 @@ def test_inspection_output_drift_defaults_none():
         summary="ok",
     )
     assert out.drift is None
+
+
+import numpy as np
+
+from drift.scoring import knn_distance, population_stability_index
+
+
+def test_knn_distance_zero_on_exact_match():
+    ref = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    # Query equals a reference point; with k=1 the nearest distance is 0.
+    assert knn_distance(np.array([0.0, 0.0]), ref, k=1) == 0.0
+
+
+def test_knn_distance_mean_of_k_nearest():
+    ref = np.array([[0.0, 0.0], [3.0, 0.0], [4.0, 0.0]])
+    # Distances from [0,0]: 0, 3, 4. Mean of 2 nearest = (0+3)/2 = 1.5.
+    assert knn_distance(np.array([0.0, 0.0]), ref, k=2) == 1.5
+
+
+def test_knn_distance_k_clamped_to_reference_size():
+    ref = np.array([[0.0, 0.0], [2.0, 0.0]])
+    # k larger than n uses all points: mean(0, 2) = 1.0.
+    assert knn_distance(np.array([0.0, 0.0]), ref, k=10) == 1.0
+
+
+def test_psi_zero_for_identical_distributions():
+    p = [0.25, 0.25, 0.25, 0.25]
+    assert population_stability_index(p, p) == 0.0
+
+
+def test_psi_positive_and_grows_with_shift():
+    expected = [0.4, 0.3, 0.2, 0.1]
+    mild = [0.35, 0.3, 0.2, 0.15]
+    severe = [0.1, 0.2, 0.3, 0.4]
+    psi_mild = population_stability_index(expected, mild)
+    psi_severe = population_stability_index(expected, severe)
+    assert psi_mild > 0
+    assert psi_severe > psi_mild
