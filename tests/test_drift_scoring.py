@@ -71,3 +71,23 @@ def test_psi_positive_and_grows_with_shift():
     psi_severe = population_stability_index(expected, severe)
     assert psi_mild > 0
     assert psi_severe > psi_mild
+
+
+from PIL import Image
+
+from drift.stats import image_stats
+
+
+def test_image_stats_keys_and_brightness_ordering():
+    dark = Image.new("RGB", (32, 32), (20, 20, 20))
+    bright = Image.new("RGB", (32, 32), (200, 200, 200))
+    sd, sb = image_stats(dark), image_stats(bright)
+    assert set(sd) == {"brightness", "contrast", "sharpness"}
+    assert sb["brightness"] > sd["brightness"]
+
+
+def test_image_stats_contrast_and_sharpness_flat_image_is_zero():
+    flat = Image.new("RGB", (32, 32), (128, 128, 128))
+    s = image_stats(flat)
+    assert s["contrast"] == 0.0      # uniform image has no spread
+    assert s["sharpness"] == 0.0     # uniform image has no edges
