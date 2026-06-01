@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     # --- service ---
     max_upload_mb: int = 15  # reject uploads larger than this (memory-exhaustion guard)
 
+    # --- input-distribution drift monitor ---
+    drift_enabled: bool = True            # master switch; off => drift never assessed
+    drift_k: int = 5                      # kNN neighbors for the per-image drift score
+    drift_far_alarm_target: float = 0.05  # max clean-image false-OOD rate (threshold calibration budget)
+    drift_window: int = 50                # population-monitor lookback (recent inspections with a drift score)
+    drift_psi_significant: float = 0.25   # PSI at/above this => "significant" line drift
+
     # --- reproducibility ---
     seed: int = 1337
 
@@ -83,6 +90,19 @@ class Settings(BaseSettings):
     def metrics_path(self) -> Path:
         """Perception metrics + calibrated operating threshold, written by eval, read by the detector."""
         return self.perception_dir / "metrics.json"
+
+    @property
+    def drift_dir(self) -> Path:
+        """Per-category drift artifacts (reference set + calibration), parallel to perception_dir."""
+        return self.artifacts_dir / "drift" / self.category
+
+    @property
+    def drift_reference_path(self) -> Path:
+        return self.drift_dir / "reference.npz"
+
+    @property
+    def drift_metrics_path(self) -> Path:
+        return self.drift_dir / "drift_metrics.json"
 
 
 settings = Settings()
