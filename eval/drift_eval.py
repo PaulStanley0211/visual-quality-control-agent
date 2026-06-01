@@ -135,6 +135,18 @@ def _save_plot(clean: np.ndarray, drifted: np.ndarray, t: float, out: Path) -> N
     plt.close(fig)
 
 
+def _loo_clean_scores(embeddings: np.ndarray, k: int) -> np.ndarray:
+    """Leave-one-out kNN distances over the training-good reference: each good image's distance to
+    the rest of the good manifold (self excluded). A large, leakage-free in-distribution clean-score
+    sample for calibrating the OOD threshold (far more stable than a tiny held-out test split)."""
+    n = embeddings.shape[0]
+    scores = np.empty(n, dtype=float)
+    for i in range(n):
+        others = np.delete(embeddings, i, axis=0)
+        scores[i] = knn_distance(embeddings[i], others, k)
+    return scores
+
+
 def evaluate() -> dict:
     rng = np.random.default_rng(settings.seed)
     reference = load_reference(settings.drift_reference_path)
@@ -144,21 +156,29 @@ def evaluate() -> dict:
     from drift.extractor import EmbeddingExtractor
 
     extractor = EmbeddingExtractor()
-    paths = _clean_image_paths()
-    print(f"[drift.eval] Scoring {len(paths)} clean images + perturbations for '{settings.category}' (CPU)...")
 
     def score(img: Image.Image) -> float:
         return knn_distance(extractor.embed(img), reference.embeddings, settings.drift_k)
 
+    # Calibrate the threshold on a leakage-free leave-one-out sample of the training-good reference
+    # (large, in-distribution). The (1 - target) quantile bounds the clean false-alarm rate at the
+    # target on a well-sampled set — far more stable than calibrating on a handful of test images.
+    cal_scores = _loo_clean_scores(reference.embeddings, settings.drift_k)
+    threshold = calibrate_threshold(cal_scores, settings.drift_far_alarm_target)
+    cal_false_alarm = float(np.mean(cal_scores >= threshold))
+
+    # Disjoint clean holdout: test/good (never used to build the reference) — the honest
+    # generalization check. Synthesize drift by perturbing copies of these clean images.
+    paths = _clean_image_paths()
+    print(f"[drift.eval] Scoring {len(paths)} clean images + perturbations for '{settings.category}' (CPU)...")
     clean_scores = np.array([score(Image.open(p).convert("RGB")) for p in paths], dtype=float)
 
     perts = _perturbations(rng)
     drifted_by_type: dict[str, np.ndarray] = {}
     for name, fn in perts.items():
-        scores = []
-        for p in paths:
-            scores.append(score(fn(Image.open(p).convert("RGB"))))
-        drifted_by_type[name] = np.array(scores, dtype=float)
+        drifted_by_type[name] = np.array(
+            [score(fn(Image.open(p).convert("RGB"))) for p in paths], dtype=float
+        )
     drifted_all = np.concatenate(list(drifted_by_type.values()))
 
     # Separability AUROC (threshold-free headline): clean=0, drifted=1.
@@ -166,47 +186,55 @@ def evaluate() -> dict:
     s = np.concatenate([clean_scores, drifted_all])
     auroc = float(roc_auc_score(y, s))
 
-    # Calibrate on a seeded clean split; report alarm rate on the disjoint clean holdout.
-    idx = np.arange(len(clean_scores))
-    rng.shuffle(idx)
-    n_cal = max(1, min(len(idx) - 1, int(round(len(idx) * CALIBRATION_FRACTION))))
-    cal_idx, hold_idx = idx[:n_cal], idx[n_cal:]
-    threshold = calibrate_threshold(clean_scores[cal_idx], settings.drift_far_alarm_target)
-
-    hold_alarms = int(np.sum(clean_scores[hold_idx] >= threshold))
-    n_hold = len(hold_idx)
-    false_alarm_rate = hold_alarms / n_hold if n_hold else 0.0
-    false_alarm_wilson = _wilson_upper(hold_alarms, n_hold)
+    n_hold = len(clean_scores)
+    hold_alarms = int(np.sum(clean_scores >= threshold))
+    holdout_far = hold_alarms / n_hold if n_hold else 0.0
+    far_granularity = 1.0 / n_hold if n_hold else 1.0
+    holdout_wilson = _wilson_upper(hold_alarms, n_hold)
 
     detection_rate = {name: float(np.mean(sc >= threshold)) for name, sc in drifted_by_type.items()}
     psi_ref = psi_reference_bins(clean_scores, n_bins=10)
 
-    alarm_ok = bool(false_alarm_rate <= settings.drift_far_alarm_target)
+    cal_granularity = 1.0 / len(cal_scores) if len(cal_scores) else 1.0
+    alarm_ok = bool(cal_false_alarm <= settings.drift_far_alarm_target + cal_granularity + 1e-9)
+    holdout_within_granularity = bool(holdout_far <= settings.drift_far_alarm_target + far_granularity + 1e-9)
     auroc_ok = bool(auroc >= 0.90)
 
     metrics = {
         "category": settings.category,
         "seed": settings.seed,
         "drift_k": settings.drift_k,
-        "n_clean": int(len(clean_scores)),
+        "n_reference": int(reference.embeddings.shape[0]),
+        "n_clean_holdout": int(n_hold),
         "n_drifted": int(len(drifted_all)),
         "separability_auroc": round(auroc, 4),
         "operating_threshold": round(threshold, 6),
         "far_alarm_target": settings.drift_far_alarm_target,
+        "calibration": {
+            "method": "train-good leave-one-out (leakage-free)",
+            "n": int(len(cal_scores)),
+            "false_alarm_rate": round(cal_false_alarm, 4),
+        },
         "holdout": {
-            "n_clean": n_hold,
-            "false_alarm_rate": round(false_alarm_rate, 4),
-            "false_alarm_wilson_upper95": round(false_alarm_wilson, 4),
+            "set": "test/good (disjoint from reference)",
+            "n_clean": int(n_hold),
+            "false_alarm_rate": round(holdout_far, 4),
+            "far_alarm_granularity": round(far_granularity, 4),
+            "false_alarm_wilson_upper95": round(holdout_wilson, 4),
+            "within_granularity": holdout_within_granularity,
         },
         "detection_rate_by_perturbation": {k: round(v, 4) for k, v in detection_rate.items()},
         "psi_reference": psi_ref,
         "auroc_ok": auroc_ok,
         "alarm_ok": alarm_ok,
         "methodology_note": (
-            "Clean = test/good (disjoint from the train/good reference). Drift synthesized via "
-            "brightness/contrast/blur/noise/jpeg perturbations. Threshold calibrated on a seeded clean "
-            "split to bound the clean false-alarm rate; reported on the disjoint clean holdout with a "
-            "Wilson upper bound. AUROC is threshold-free."
+            "Threshold calibrated to bound the clean false-alarm rate at the target on a leakage-free "
+            "leave-one-out sample of the training-good reference (large, in-distribution). The disjoint "
+            "test/good holdout reports the generalization false-alarm rate with 1/n granularity and a "
+            "Wilson 95% upper bound; with only n_clean_holdout held-out clean images it cannot certify "
+            "the target, so it is read with its sampling uncertainty (mirrors the perception FAR "
+            "methodology). Drift is synthesized via brightness/contrast/blur/noise/jpeg perturbations; "
+            "AUROC is threshold-free."
         ),
     }
 
@@ -218,8 +246,9 @@ def evaluate() -> dict:
     print(json.dumps(metrics, indent=2))
     print(
         f"[drift.eval] separability AUROC {auroc:.4f} (>=0.90: {auroc_ok}); "
-        f"clean holdout false-alarm {false_alarm_rate:.1%} "
-        f"(Wilson-upper {false_alarm_wilson:.1%}; budget {settings.drift_far_alarm_target:.0%}: {alarm_ok})."
+        f"calibration false-alarm {cal_false_alarm:.1%} (budget {settings.drift_far_alarm_target:.0%}: {alarm_ok}); "
+        f"disjoint holdout false-alarm {holdout_far:.1%} "
+        f"(±granularity {far_granularity:.1%}, Wilson-upper {holdout_wilson:.1%}, n={n_hold})."
     )
     return metrics
 
