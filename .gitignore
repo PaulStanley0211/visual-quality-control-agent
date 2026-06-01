@@ -19,6 +19,9 @@ memory/*.db
 # Local session handoff / status notes (not for the public repo)
 PROJECT_STATUS.md
 
+# Scratch demo images / status blobs generated during local demos
+demo_tmp/
+
 # Environment
 .env
 
