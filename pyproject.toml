@@ -1,0 +1,53 @@
+[project]
+name = "visual-quality-control-agent"
+version = "0.1.0"
+description = "Autonomous visual quality-control agent: PatchCore perception + LangGraph reasoning over a synthetic MES."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "anomalib>=1.2",
+    "torch",
+    "torchvision",
+    "langgraph>=1.0",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "streamlit",
+    "numpy",
+    "pillow",
+    "scikit-learn",
+    "matplotlib",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# Real LLM backends are optional — the default "stub" provider keeps the repo key-free and offline.
+llm = ["anthropic", "ollama"]
+
+[dependency-groups]
+# Installed by default on `uv sync` (PEP 735), so the venv always has the test stack.
+dev = ["pytest", "httpx"]
+
+[tool.uv]
+# Application project (not a distributable library); uv manages the env but does not build/install the root.
+package = false
+
+# Pull torch/torchvision from PyTorch's CPU wheel index (no GPU on this machine; keeps the image small).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "regression: validates trained perception artifacts (skipped if absent)",
+    "escalation: confidence-boundary escalation behaviour",
+    "reasoning: agent disposition/diagnosis correctness on the scenario set",
+]
