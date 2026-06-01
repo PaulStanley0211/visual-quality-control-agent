@@ -270,7 +270,7 @@ def make_escalate_node(deps: AgentDeps):
     def escalate(state: InspectionState) -> dict:
         decision = state["decision"]
         actions = Actions()  # all held
-        new_trace = ["Escalated to human reviewer (confidence below threshold); automated actions held."]
+        new_trace = ["Escalated to human reviewer; automated actions held."]
         conn = deps.connect()
         try:
             with conn:
