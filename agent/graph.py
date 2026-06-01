@@ -19,6 +19,7 @@ def build_graph(deps: AgentDeps | None = None):
     deps = deps or AgentDeps()
     g = StateGraph(InspectionState)
     g.add_node("detect", nodes.make_detect_node(deps))
+    g.add_node("assess_drift", nodes.make_assess_drift_node(deps))
     g.add_node("gather_context", nodes.make_gather_context_node(deps))
     g.add_node("investigate", nodes.investigate)
     g.add_node("decide", nodes.decide)
@@ -27,7 +28,8 @@ def build_graph(deps: AgentDeps | None = None):
     g.add_node("escalate", nodes.make_escalate_node(deps))
 
     g.add_edge(START, "detect")
-    g.add_edge("detect", "gather_context")
+    g.add_edge("detect", "assess_drift")
+    g.add_edge("assess_drift", "gather_context")
     g.add_edge("gather_context", "investigate")
     g.add_edge("investigate", "decide")
     g.add_edge("decide", "reason")
