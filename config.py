@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-opus-4-8"
     ollama_model: str = "llama3.1"
 
+    # --- service ---
+    max_upload_mb: int = 15  # reject uploads larger than this (memory-exhaustion guard)
+
     # --- reproducibility ---
     seed: int = 1337
 

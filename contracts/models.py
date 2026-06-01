@@ -81,4 +81,5 @@ class InspectionOutput(BaseModel):
     actions: Actions = Field(default_factory=Actions)
     escalated: bool = Field(default=False, description="True if routed to a human reviewer for low confidence.")
     summary: str
+    heatmap_path: str | None = Field(default=None, description="Anomaly heatmap overlay produced by this inspection.")
     reasoning_trace: list[str] = Field(default_factory=list, description="Ordered audit trail of the agent's steps.")

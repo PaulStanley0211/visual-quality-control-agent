@@ -1,0 +1,20 @@
+# Keep the build context small. The trained model (artifacts/perception/) IS included
+# for inference; the dataset, runtime DBs, heatmaps, and dev cruft are excluded.
+.git/
+.venv/
+.env
+*.env
+datasets/
+# Keep the deployable model (artifacts/perception/weights/torch/model.pt) + metrics.json,
+# but drop the training-only Lightning checkpoint and the eval plot.
+artifacts/perception/Patchcore/
+artifacts/perception/threshold_tradeoff.png
+artifacts/heatmaps/
+artifacts/agent_eval_mes.db
+artifacts/agent_metrics.json
+memory/*.db
+tests/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+docs/

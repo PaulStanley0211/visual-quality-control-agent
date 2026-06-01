@@ -2,7 +2,7 @@
 
 An autonomous industrial inspection agent that detects part defects, diagnoses whether a fault is **random or systematic** using long-term factory history, decides a disposition (**pass / rework / reject**), and triggers corrective workflows autonomously — escalating low-confidence cases to a human. It goes beyond detect-and-report into a goal-driven **plan → act → observe → act** loop, with both perception and reasoning held to defined accuracy budgets.
 
-> **Status:** Milestones A (Perception) and B (long-term memory + LangGraph agent loop) complete and verified. Milestone C (FastAPI service + Streamlit demo) is in progress. See [Roadmap](#roadmap).
+> **Status:** Milestones A (Perception), B (long-term memory + LangGraph agent loop), and C (FastAPI service + Docker + Streamlit demo) complete and verified. See [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -64,6 +64,22 @@ A key design point surfaced by review: the agent's own decision rows are tagged 
 | Escalation accuracy | **100%** | — |
 | Corrective-action accuracy | **100%** | — |
 
+## Service & demo
+
+```bash
+# FastAPI service — POST /inspect (image + part_id) -> InspectionOutput JSON, GET /health
+uv run uvicorn service.app:app --host 0.0.0.0 --port 8000
+
+# Streamlit demo — upload an image, watch the investigation, view the three-part output
+uv run streamlit run ui/streamlit_app.py
+
+# Container (needs a trained model under artifacts/perception/ first)
+docker build -t vqc-agent -f service/Dockerfile .
+docker run -p 8000:8000 vqc-agent
+```
+
+The service builds the compiled graph once at startup and seeds the MES if empty; the confidence threshold and LLM provider are env-overridable (`VQC_*`) for tuning at deploy time.
+
 ## Project structure
 
 ```
@@ -81,7 +97,7 @@ tests/        unit, regression, escalation, reasoning tests
 
 - **Milestone A — Perception** ✅ train / detect / validate against the error budget.
 - **Milestone B — Memory + Agent loop** ✅ seeded SQLite MES, LangGraph agent, structured decision/diagnosis/actions with an escalation path, labeled-scenario validation (disposition + random-vs-systematic accuracy).
-- **Milestone C — Service + UI** FastAPI `/inspect` endpoint, Docker, Streamlit demo.
+- **Milestone C — Service + UI** ✅ FastAPI `/inspect` endpoint, uv-locked Docker image (CPU), Streamlit demo.
 
 ## Limitations
 

@@ -15,6 +15,7 @@ Run:  uv run python -m memory.seed
 from __future__ import annotations
 
 import random
+import sqlite3
 from datetime import datetime, timedelta
 
 from config import settings
@@ -66,6 +67,23 @@ SCENARIO_PARTS = [
     ("SCN-GOOD-1", "M3", "B1"),      # used for a pass (no-defect) scenario
     ("SCN-GOOD-2", "M1", "B1"),      # pass
 ]
+
+
+def ensure_seeded(db_path=None) -> None:
+    """Seed only if the MES is missing or has no parts yet (idempotent, safe to call on every startup)."""
+    path = db_path or settings.mes_db_path
+    if not path.exists():
+        seed(db_path, verbose=False)
+        return
+    conn = mes.connect(path)
+    try:
+        n = conn.execute("SELECT COUNT(*) AS c FROM parts").fetchone()["c"]
+    except sqlite3.OperationalError:  # 'no such table: parts' — empty/fresh DB file
+        n = 0
+    finally:
+        conn.close()
+    if n == 0:
+        seed(db_path, verbose=False)
 
 
 def _insert_history(conn, rng, op_ids, idx: int, machine: str, batch: str, is_defective: bool) -> None:

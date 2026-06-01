@@ -255,6 +255,7 @@ def _build_output(
     state: InspectionState, decision: Decision, actions: Actions, escalated: bool, extra_trace: list[str]
 ) -> InspectionOutput:
     full_trace = list(state.get("reasoning_trace", [])) + list(extra_trace)
+    dr = state.get("detect_result")
     return InspectionOutput(
         part_id=state["part_id"],
         decision=decision,
@@ -262,6 +263,7 @@ def _build_output(
         actions=actions,
         escalated=escalated,
         summary=state.get("summary", ""),
+        heatmap_path=dr.heatmap_path if dr else None,
         reasoning_trace=full_trace,
     )
 

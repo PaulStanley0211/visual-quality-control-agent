@@ -20,9 +20,11 @@ _DIMENSIONS = {"machine_id", "batch_id", "operator_id"}
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or settings.mes_db_path
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=5.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")   # concurrent readers + a writer
+    conn.execute("PRAGMA busy_timeout = 5000")  # wait, don't immediately error, on lock contention
     return conn
 
 
