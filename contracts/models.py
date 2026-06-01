@@ -23,6 +23,18 @@ class DetectResult(BaseModel):
     location: str | None = Field(default=None, description="Region of the part where the anomaly concentrates (from the heatmap).")
 
 
+class DriftResult(BaseModel):
+    """Output of the drift monitor for a single part image (None when drift is not assessed)."""
+
+    is_ood: bool = Field(description="True if drift_score >= the calibrated OOD threshold.")
+    drift_score: float = Field(description="Mean distance from the image embedding to its k nearest training-good embeddings.")
+    threshold: float = Field(description="Calibrated OOD threshold (clean-image false-alarm budget on holdout).")
+    brightness_delta: float | None = Field(default=None, description="Brightness vs training baseline, in std units.")
+    contrast_delta: float | None = Field(default=None, description="Contrast vs training baseline, in std units.")
+    sharpness_delta: float | None = Field(default=None, description="Sharpness vs training baseline, in std units.")
+    note: str = Field(description="Plain-language read, e.g. 'In-distribution' or 'OOD: brightness down 2.4σ'.")
+
+
 class Disposition(str, Enum):
     """Final routing decision for a part."""
 
@@ -82,4 +94,5 @@ class InspectionOutput(BaseModel):
     escalated: bool = Field(default=False, description="True if routed to a human reviewer for low confidence.")
     summary: str
     heatmap_path: str | None = Field(default=None, description="Anomaly heatmap overlay produced by this inspection.")
+    drift: DriftResult | None = Field(default=None, description="Input-distribution drift assessment for this image, if assessed.")
     reasoning_trace: list[str] = Field(default_factory=list, description="Ordered audit trail of the agent's steps.")
