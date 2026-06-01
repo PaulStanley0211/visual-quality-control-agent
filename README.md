@@ -2,7 +2,7 @@
 
 An autonomous industrial inspection agent that detects part defects, diagnoses whether a fault is **random or systematic** using long-term factory history, decides a disposition (**pass / rework / reject**), and triggers corrective workflows autonomously — escalating low-confidence cases to a human. It goes beyond detect-and-report into a goal-driven **plan → act → observe → act** loop, with both perception and reasoning held to defined accuracy budgets.
 
-> **Status:** Milestone A (Perception) complete and verified. Milestone B (long-term memory + LangGraph agent loop) and Milestone C (FastAPI service + Streamlit demo) are in progress. See [Roadmap](#roadmap).
+> **Status:** Milestones A (Perception) and B (long-term memory + LangGraph agent loop) complete and verified. Milestone C (FastAPI service + Streamlit demo) is in progress. See [Roadmap](#roadmap).
 
 ## Architecture
 
@@ -44,14 +44,34 @@ uv run python -m pytest tests/             # regression suite
 
 The operating threshold is calibrated on a seeded **calibration split** and FAR/FRR are reported on a disjoint **holdout split**, so the budget claim is an honest generalization estimate rather than in-sample. The model separates classes near-perfectly; `bottle` simply has too few defect samples to *certify* a 2% false-accept rate on held-out data (a single missed defect already exceeds it). This is a dataset-size limitation, not a model weakness — see [Limitations](#limitations).
 
+## Agent: memory, reasoning loop, evaluation
+
+```bash
+uv run python -m memory.seed         # build the synthetic MES (machines/batches/operators/parts/history)
+uv run python -m eval.agent_eval     # score the labeled scenario set
+```
+
+The agent runs a **LangGraph** loop — `detect → gather context → investigate → decide → reason → act | escalate` — over a seeded **SQLite MES**. Every disposition (pass/rework/reject) and the random-vs-systematic call are **deterministic pure functions** ([agent/decisions.py](agent/decisions.py)); the LLM (default: offline stub) only writes the narrative. A defect is **systematic** when the machine *or* batch recent defect rate clears a threshold (e.g. an overdue machine or a bad material lot), otherwise **random**. Low-confidence cases — weak perception, ambiguous near-threshold history, or unknown severity — **escalate to a human** and hold automated actions. Every inspection, NCR, CAPA, and machine flag is written back to the MES as an audit trail.
+
+A key design point surfaced by review: the agent's own decision rows are tagged `source='agent'` and **excluded** from the defect-rate signal (only `source='qc'` production history counts), so the agent can never amplify its own dispositions into a false "systematic" verdict.
+
+**Agent validation** (offline stub, 12 labeled scenarios incl. boundary + both-driver + escalation cases):
+
+| Metric | Result | Target |
+|---|---|---|
+| Disposition accuracy | **100%** | ≥ 95% |
+| Random-vs-systematic accuracy | **100%** | ≥ 95% |
+| Escalation accuracy | **100%** | — |
+| Corrective-action accuracy | **100%** | — |
+
 ## Project structure
 
 ```
 perception/   PatchCore training, data prep, detect() interface
-agent/        LangGraph nodes, tools, state, guardrails        (Milestone B)
+agent/        LangGraph nodes, tools, state, guardrails, decisions, llm
 contracts/    Pydantic I/O contracts
-memory/       SQLite MES schema + seed                          (Milestone B)
-eval/         perception & agent validation                    (agent eval: Milestone B)
+memory/       SQLite MES schema + seed + query/write interface
+eval/         perception & agent validation
 service/      FastAPI app + Docker                              (Milestone C)
 ui/           Streamlit demo                                    (Milestone C)
 tests/        unit, regression, escalation, reasoning tests
@@ -60,7 +80,7 @@ tests/        unit, regression, escalation, reasoning tests
 ## Roadmap
 
 - **Milestone A — Perception** ✅ train / detect / validate against the error budget.
-- **Milestone B — Memory + Agent loop** seeded SQLite MES, LangGraph agent, structured decision/diagnosis/actions with an escalation path, labeled-scenario validation (disposition + random-vs-systematic accuracy).
+- **Milestone B — Memory + Agent loop** ✅ seeded SQLite MES, LangGraph agent, structured decision/diagnosis/actions with an escalation path, labeled-scenario validation (disposition + random-vs-systematic accuracy).
 - **Milestone C — Service + UI** FastAPI `/inspect` endpoint, Docker, Streamlit demo.
 
 ## Limitations

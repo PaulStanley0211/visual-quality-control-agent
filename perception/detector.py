@@ -123,15 +123,32 @@ class Detector:
         p_defective = 0.5 * (1.0 + math.tanh(z / 2.0))
         return p_defective if is_defective else (1.0 - p_defective)
 
-    def _save_heatmap(self, anomaly_map, source_image: Image.Image, part_id: str) -> str:
-        from matplotlib import cm
-
+    @staticmethod
+    def _normalize_map(anomaly_map) -> np.ndarray:
+        """Return the anomaly map as a 2D float array normalized to [0, 1]."""
         am = anomaly_map.detach().cpu().numpy() if isinstance(anomaly_map, torch.Tensor) else np.asarray(anomaly_map)
         am = np.squeeze(am).astype(np.float32)
         while am.ndim > 2:  # collapse any remaining leading dims deterministically
             am = am[0]
         lo, hi = float(am.min()), float(am.max())
-        norm = (am - lo) / (hi - lo) if hi > lo else np.zeros_like(am)
+        return (am - lo) / (hi - lo) if hi > lo else np.zeros_like(am)
+
+    @staticmethod
+    def _describe_anomaly(norm: np.ndarray, hot: float = 0.5) -> tuple[float, str | None]:
+        """From the normalized map, return (anomalous area fraction, coarse location)."""
+        mask = norm >= hot
+        area = float(mask.mean())
+        if not mask.any():
+            return area, None
+        rows, cols = np.nonzero(mask)
+        cy, cx = rows.mean() / norm.shape[0], cols.mean() / norm.shape[1]
+        vert = "upper" if cy < 0.34 else "lower" if cy > 0.66 else "middle"
+        horiz = "left" if cx < 0.34 else "right" if cx > 0.66 else "center"
+        return area, "center" if (vert, horiz) == ("middle", "center") else f"{vert}-{horiz}"
+
+    def _save_heatmap(self, norm: np.ndarray, source_image: Image.Image, part_id: str) -> str:
+        from matplotlib import cm
+
         colored = (cm.jet(norm)[:, :, :3] * 255).astype(np.uint8)
         heat = Image.fromarray(colored).resize(source_image.size, Image.BILINEAR)
         overlay = Image.blend(source_image.convert("RGB"), heat, alpha=0.5)
@@ -160,12 +177,17 @@ class Detector:
         is_defective = bool(score >= self.threshold)
         confidence = self._confidence(score, is_defective)
 
-        heatmap_path = None
-        if save_heatmap and result.anomaly_map is not None:
-            try:
-                heatmap_path = self._save_heatmap(result.anomaly_map, source, part_id)
-            except Exception as e:  # an optional overlay must never fail a valid detection
-                logger.warning("Heatmap generation failed for part '%s': %s", part_id, e)
+        defect_area: float | None = None
+        location: str | None = None
+        heatmap_path: str | None = None
+        if result.anomaly_map is not None:
+            norm = self._normalize_map(result.anomaly_map)
+            defect_area, location = self._describe_anomaly(norm)
+            if save_heatmap:
+                try:
+                    heatmap_path = self._save_heatmap(norm, source, part_id)
+                except Exception as e:  # an optional overlay must never fail a valid detection
+                    logger.warning("Heatmap generation failed for part '%s': %s", part_id, e)
 
         return DetectResult(
             is_defective=is_defective,
@@ -173,4 +195,6 @@ class Detector:
             anomaly_score=round(score, 6),
             threshold=round(self.threshold, 6),
             heatmap_path=heatmap_path,
+            defect_area=round(defect_area, 6) if defect_area is not None else None,
+            location=location,
         )

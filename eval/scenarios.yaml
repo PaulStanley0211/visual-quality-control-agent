@@ -1,0 +1,76 @@
+# Labeled agent scenarios with known-correct dispositions, fault patterns, escalation, and
+# corrective actions. Each scenario pins a part (resolving its MES history) and an injected
+# perception result, so the agent's reasoning/decision/escalation/actions are scored
+# deterministically and offline. The DB is re-seeded before each scenario for write-isolation.
+
+- name: systematic_machine_reject
+  part_id: SCN-SYSMACH-1                 # machine M2 is overdue (60% recent defect rate)
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.03, location: upper-left}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: false,
+             actions: {ncr: true, capa: true, machine_flag: true}}
+
+- name: systematic_machine_reject_2
+  part_id: SCN-SYSMACH-2
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.04, location: upper-right}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: false,
+             actions: {ncr: true, capa: true, machine_flag: true}}
+
+- name: systematic_batch_reject
+  part_id: SCN-SYSBATCH-1                # batch B2 is a bad lot (50%) on a good machine
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.03, location: center}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: false,
+             actions: {ncr: true, capa: true, machine_flag: true}}
+
+- name: systematic_batch_reject_2
+  part_id: SCN-SYSBATCH-2
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.02, location: lower-left}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: false,
+             actions: {ncr: true, capa: true, machine_flag: true}}
+
+- name: both_drivers_systematic_reject
+  part_id: SCN-BOTH-1                    # overdue machine M2 AND bad lot B2 -> both drivers
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.03, location: center}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: false,
+             actions: {ncr: true, capa: true, machine_flag: true}}
+
+- name: random_minor_rework
+  part_id: SCN-RANDOM-1                  # clean machine + batch, small anomaly
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.02, location: lower-right}
+  expected: {disposition: rework, fault_pattern: random, escalated: false,
+             actions: {ncr: true, capa: false, machine_flag: false}}
+
+- name: severe_random_reject
+  part_id: SCN-RANDOM-2                  # clean history but large anomaly -> reject on severity
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.10, location: center}
+  expected: {disposition: reject, fault_pattern: random, escalated: false,
+             actions: {ncr: true, capa: false, machine_flag: false}}
+
+- name: good_pass
+  part_id: SCN-GOOD-1
+  detect: {is_defective: false, confidence: 0.92, defect_area: 0.0}
+  expected: {disposition: pass, fault_pattern: null, escalated: false,
+             actions: {ncr: false, capa: false, machine_flag: false}}
+
+- name: good_pass_2
+  part_id: SCN-GOOD-2
+  detect: {is_defective: false, confidence: 0.90, defect_area: 0.0}
+  expected: {disposition: pass, fault_pattern: null, escalated: false,
+             actions: {ncr: false, capa: false, machine_flag: false}}
+
+- name: low_confidence_defect_escalation
+  part_id: SCN-RANDOM-1                  # confident-low perception -> escalate, hold actions
+  detect: {is_defective: true, confidence: 0.50, defect_area: 0.02, location: upper-left}
+  expected: {disposition: rework, fault_pattern: random, escalated: true,
+             actions: {ncr: false, capa: false, machine_flag: false}}
+
+- name: near_threshold_ambiguous_escalation
+  part_id: SCN-NEAR-1                    # machine M4 rate == 30% threshold -> reasoning ambiguity
+  detect: {is_defective: true, confidence: 0.95, defect_area: 0.02, location: center}
+  expected: {disposition: reject, fault_pattern: systematic, escalated: true,
+             actions: {ncr: false, capa: false, machine_flag: false}}
+
+- name: uncertain_good_escalation
+  part_id: SCN-GOOD-2                    # low-confidence "good" must escalate (false-accept risk)
+  detect: {is_defective: false, confidence: 0.45, defect_area: 0.0}
+  expected: {disposition: pass, fault_pattern: null, escalated: true,
+             actions: {ncr: false, capa: false, machine_flag: false}}

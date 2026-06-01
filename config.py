@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     # --- routing / escalation ---
     confidence_threshold: float = 0.60  # below this, low-confidence cases escalate to a human
 
+    # --- maintenance policy ---
+    maintenance_cutoff: str = "2026-04-01"  # machines last maintained before this are "overdue"
+
     # --- investigation: systematic vs random ---
     systematic_defect_rate: float = 0.30  # machine/batch recent defect-rate above this => systematic
     history_window: int = 20  # how many recent parts define "recent" for the rate
+    severe_area_threshold: float = 0.05  # heatmap hot-area fraction above this => severe defect => reject
 
     # --- reasoning LLM (offline-first, swappable) ---
     llm_provider: str = "stub"  # "stub" | "anthropic" | "ollama"
