@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS inspections (
     is_defective  INTEGER NOT NULL,               -- 0 | 1
     confidence    REAL,
     anomaly_score REAL,
+    drift_score   REAL,                           -- input-distribution drift score (NULL if not assessed)
     defect_type   TEXT,
     disposition   TEXT,                            -- 'pass' | 'rework' | 'reject'
     fault_pattern TEXT,                            -- 'random' | 'systematic'

@@ -28,8 +28,16 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Idempotent, additive migrations for databases created before a column existed."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(inspections)").fetchall()}
+    if "drift_score" not in cols:
+        conn.execute("ALTER TABLE inspections ADD COLUMN drift_score REAL")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_PATH.read_text())
+    _migrate(conn)
     conn.commit()
 
 
@@ -125,6 +133,7 @@ def record_inspection(
     is_defective: bool,
     confidence: float | None,
     anomaly_score: float | None,
+    drift_score: float | None = None,
     defect_type: str | None,
     disposition: str | None,
     fault_pattern: str | None,
@@ -137,12 +146,12 @@ def record_inspection(
     cur = conn.execute(
         """
         INSERT INTO inspections
-          (part_id, ts, is_defective, confidence, anomaly_score, defect_type,
+          (part_id, ts, is_defective, confidence, anomaly_score, drift_score, defect_type,
            disposition, fault_pattern, escalated, reasoning, actions_json, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            part_id, _now_iso(), int(is_defective), confidence, anomaly_score, defect_type,
+            part_id, _now_iso(), int(is_defective), confidence, anomaly_score, drift_score, defect_type,
             disposition, fault_pattern, int(escalated), reasoning, json.dumps(actions), source,
         ),
     )

@@ -84,6 +84,14 @@ def ensure_seeded(db_path=None) -> None:
         conn.close()
     if n == 0:
         seed(db_path, verbose=False)
+    else:
+        # Already seeded: ensure the schema is current (additive migrations only).
+        conn = mes.connect(path)
+        try:
+            with conn:
+                mes._migrate(conn)
+        finally:
+            conn.close()
 
 
 def _insert_history(conn, rng, op_ids, idx: int, machine: str, batch: str, is_defective: bool) -> None:
