@@ -52,4 +52,5 @@ markers = [
     "escalation: confidence-boundary escalation behaviour",
     "reasoning: agent disposition/diagnosis correctness on the scenario set",
     "service: FastAPI service tests (skipped unless model + MES present)",
+    "drift: validates the drift-monitor calibration artifact (skipped if absent)",
 ]
