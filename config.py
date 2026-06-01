@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -50,6 +51,9 @@ class Settings(BaseSettings):
     llm_provider: str = "stub"  # "stub" | "anthropic" | "ollama"
     anthropic_model: str = "claude-opus-4-8"
     ollama_model: str = "llama3.1"
+    # The Anthropic SDK's standard credential (read from env or .env). validation_alias bypasses the
+    # VQC_ prefix so it picks up the conventional ANTHROPIC_API_KEY name; None lets the SDK self-resolve.
+    anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
     # --- service ---
     max_upload_mb: int = 15  # reject uploads larger than this (memory-exhaustion guard)
