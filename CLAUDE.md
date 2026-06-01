@@ -3,7 +3,7 @@
 Autonomous industrial inspection agent that detects part defects, diagnoses cause, and acts — going beyond detect-and-report into a goal-driven plan / act / observe / act loop, with both perception and reasoning held to defined accuracy budgets.
 
 ## Use Case
-Single-station visual quality control on the MVTec AD dataset. For each part the agent decides disposition (pass / rework / reject), determines whether a defect is random or systematic, and triggers corrective workflows autonomously, escalating low-confidence cases to a human reviewer.
+Single-station visual quality control on the MVTec AD dataset. For each part the agent decides disposition (pass / rework / reject), determines whether a defect is random or systematic, and triggers corrective workflows autonomously, escalating low-confidence cases to a human reviewer. Validated on two categories (`bottle`, `hazelnut`); per-category PatchCore models coexist and are selected by `VQC_CATEGORY`.
 
 ## Agent Architecture
 - Brain: reasoning LLM (via LangGraph) for diagnosis interpretation and narrative generation.
@@ -18,7 +18,7 @@ Goal (inspect and resolve) -> Plan (route by state) -> Act (invoke tools) -> Obs
 ## Stack
 - Package manager: uv (exclusive; locked dependencies, reproducible builds).
 - Orchestration: LangGraph. Perception: Anomalib (PatchCore) on PyTorch.
-- Reasoning: hosted frontier LLM for development, with a local Ollama-served model (e.g. Llama 3.1) as an offline, key-free fallback so the repo runs without API access.
+- Reasoning: an offline deterministic stub is the default (no key/GPU needed); a hosted Anthropic (Claude) provider — wired via structured outputs — or a local Ollama model plugs in via `VQC_LLM_PROVIDER` (+ `ANTHROPIC_API_KEY` in `.env`). Dispositions stay deterministic regardless of provider.
 - Data: MVTec AD (CC BY-NC-SA 4.0, non-commercial — credited, not redistributed).
 - Contracts / IO: Pydantic. Service: FastAPI + Docker. UI: Streamlit. Tracing: LangSmith (optional).
 - Reproducibility: fixed random seeds and pinned dataset splits across training and evaluation.
@@ -33,6 +33,14 @@ eval/         perception and agent validation, labeled scenario set
 tests/        unit, regression, escalation, reasoning tests
 ui/           Streamlit demo
 ```
+
+## Dev notes (environment + gotchas)
+- Use `uv run` for everything; never system `python` (system Python is 3.14, too new for torch/anomalib — uv pins 3.11).
+- Run tests as `uv run python -m pytest`, NOT `uv run pytest` (a global pytest on 3.14 gets picked up and fails with no torch).
+- When `.env` sets `VQC_LLM_PROVIDER=anthropic`, run the suite hermetically: `VQC_LLM_PROVIDER=stub uv run python -m pytest` (avoids a live API call in the service test).
+- Perception artifacts are per-category under `artifacts/perception/<category>/`; switch with `VQC_CATEGORY`. `VQC_CORESET_SAMPLING_RATIO` (default 0.1) tunes PatchCore fit cost — `0.01` ("PatchCore-1%") trains ~10x faster at ~the same AUROC.
+- anomalib's MVTec downloader 404s; `perception/prepare_data.py` fetches the active category from a Hugging Face mirror (idempotent).
+- Windows: prefix non-ASCII-printing scripts with `PYTHONUTF8=1`; in the Bash tool `unset VIRTUAL_ENV` first to silence a stale-venv uv warning.
 
 ## Plan (end to end)
 1. Perception core: train PatchCore on one category; expose detect(image) -> {is_defective, confidence, heatmap}.
@@ -71,4 +79,4 @@ One-screen summary: problem, architecture diagram, perception and agent validati
 ## Limitations and Future Work
 - The MES is synthetic-but-realistic; the query interface is designed for real MES integration, which is the path to production.
 - Vision accuracy degrades under lighting, camera, or part-variant drift; continuous input monitoring and periodic retraining are required in a live deployment.
-- Single-station, single-category scope by design; multi-station orchestration and logical-anomaly handling (MVTec LOCO AD) are natural extensions.
+- Single-station scope; per-category models are supported and demonstrated on `bottle` + `hazelnut`, but multi-station orchestration and logical-anomaly handling (MVTec LOCO AD) remain natural extensions.
