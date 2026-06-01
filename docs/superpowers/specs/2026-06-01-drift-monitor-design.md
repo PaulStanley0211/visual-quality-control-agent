@@ -210,9 +210,10 @@ control. (Fail-closed → escalate-everything was considered and rejected as too
 1. **MES schema:** add a nullable `drift_score REAL` column to the `inspections` table;
    `mes.record_inspection` writes `state["drift"].drift_score` or NULL. This is the only schema touch.
 2. **`drift/report.py`** (`python -m drift.report`): pulls the last `settings.drift_window`
-   (default 50) **production** (`source='qc'`) inspections' drift scores from the MES and compares
-   their distribution to the **reference clean distribution** (bin edges + expected proportions stored
-   in `drift_metrics.json` at calibration time) via **PSI**:
+   (default 50) inspections that **carry a recorded drift score** (`drift_score IS NOT NULL` — the
+   real processed-image stream; synthetic `source='qc'` seed rows have no image and no drift score, so
+   they're naturally excluded) and compares their distribution to the **reference clean distribution**
+   (bin edges + expected proportions stored in `drift_metrics.json` at calibration time) via **PSI**:
 
    ```
    PSI = Σ (actual% − expected%) · ln(actual% / expected%)
@@ -224,8 +225,8 @@ control. (Fail-closed → escalate-everything was considered and rejected as too
    *"Line drift: PSI 0.31 — SIGNIFICANT; 7/50 parts OOD; brightness trending −1.8σ → investigate /
    consider retraining."*
 
-   Reuses the `source='qc'` vs `source='agent'` tagging so the monitor reflects the real production
-   stream, consistent with `recent_defect_rate`.
+   The window reflects the real stream of images the agent actually processed (the rows that carry a
+   drift score), which is exactly the population whose drift matters.
 
 ## 7. Validation (`eval/drift_eval.py` — mirrors `perception_eval.py`)
 
