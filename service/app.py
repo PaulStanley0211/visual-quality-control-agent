@@ -53,7 +53,23 @@ def health() -> dict:
         "category": settings.category,
         "llm_provider": settings.llm_provider,
         "confidence_threshold": settings.confidence_threshold,
+        "drift_enabled": settings.drift_enabled,
+        "drift_reference_present": settings.drift_reference_path.exists() and settings.drift_metrics_path.exists(),
     }
+
+
+@app.get("/drift")
+def drift() -> dict:
+    """Windowed population drift report (PSI + %OOD over recent drift-scored inspections)."""
+    if not settings.drift_metrics_path.exists():
+        raise HTTPException(status_code=503, detail="Drift monitor not calibrated; run drift.reference + eval.drift_eval.")
+    from drift.report import population_report
+
+    conn = mes.connect()
+    try:
+        return population_report(conn)
+    finally:
+        conn.close()
 
 
 # Plain `def` (not async): Starlette runs it in the threadpool, so the blocking CPU inference

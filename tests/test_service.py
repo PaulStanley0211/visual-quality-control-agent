@@ -59,3 +59,18 @@ def test_inspect_unknown_part_returns_404(client):
     with open(_defect_image(), "rb") as f:
         r = client.post("/inspect", data={"part_id": "NOPE"}, files={"image": ("p.png", f, "image/png")})
     assert r.status_code == 404
+
+
+@requires
+def test_health_exposes_drift_fields(client):
+    body = client.get("/health").json()
+    assert "drift_enabled" in body
+    assert "drift_reference_present" in body
+
+
+@requires
+def test_drift_report_endpoint(client):
+    r = client.get("/drift")
+    assert r.status_code == 200
+    body = r.json()
+    assert "band" in body and "n" in body
