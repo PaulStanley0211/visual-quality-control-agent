@@ -55,6 +55,20 @@ def part_context_caption(part_id: str) -> str:
     )
 
 
+def line_drift_report():
+    from config import settings as _settings
+
+    if not _settings.drift_metrics_path.exists():
+        return None
+    from drift.report import population_report
+
+    conn = mes.connect()
+    try:
+        return population_report(conn)
+    finally:
+        conn.close()
+
+
 st.title("🔍 Visual Quality Control Agent")
 st.caption(
     "Single-station inspection on MVTec AD. Detects defects, diagnoses random vs systematic from factory "
@@ -131,6 +145,21 @@ with col_out:
 
         st.info(out.summary)
 
+        if out.drift is not None:
+            d = out.drift
+            if d.is_ood:
+                st.warning(
+                    f"⚠️ Input drift: **OUT-OF-DISTRIBUTION** — {d.note} "
+                    f"(drift score {d.drift_score:.3f} ≥ threshold {d.threshold:.3f}). "
+                    "This image is outside the model's validated envelope, so the decision was escalated."
+                )
+            else:
+                st.success(f"✅ Input in-distribution (drift score {d.drift_score:.3f} < threshold {d.threshold:.3f}).")
+            st.caption(
+                f"Brightness {d.brightness_delta:+.1f}σ · Contrast {d.contrast_delta:+.1f}σ · Sharpness {d.sharpness_delta:+.1f}σ "
+                "(vs training baseline)"
+            )
+
         if out.diagnosis and out.diagnosis.probable_cause:
             st.markdown(f"**Probable cause:** {out.diagnosis.probable_cause}")
 
@@ -143,3 +172,15 @@ with col_out:
                 st.write(f"{i}. {line}")
     else:
         st.caption("Pick a part, upload an image, and press **Inspect**.")
+
+    st.divider()
+    st.subheader("Line drift monitor")
+    report = line_drift_report()
+    if report is None:
+        st.caption("Drift monitor not calibrated — run `uv run python -m drift.reference` then `uv run python -m eval.drift_eval`.")
+    elif report["n"] == 0:
+        st.caption("No drift-scored inspections yet. Inspect a few uploaded images to populate the monitor.")
+    else:
+        band_icon = {"stable": "🟢", "moderate": "🟡", "significant": "🔴"}.get(report["band"], "•")
+        st.metric("Population drift (PSI)", f"{report['psi']:.2f}", help="<0.1 stable · 0.1–0.25 moderate · >0.25 significant")
+        st.write(f"{band_icon} **{report['band'].upper()}** — {report['frac_ood']:.0%} of the last {report['n']} parts flagged OOD.")
