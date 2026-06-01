@@ -91,3 +91,21 @@ def test_image_stats_contrast_and_sharpness_flat_image_is_zero():
     s = image_stats(flat)
     assert s["contrast"] == 0.0      # uniform image has no spread
     assert s["sharpness"] == 0.0     # uniform image has no edges
+
+
+from eval.drift_eval import calibrate_threshold, psi_reference_bins
+
+
+def test_calibrate_threshold_bounds_clean_false_alarm():
+    # 100 clean scores 0..0.99; with a 5% alarm budget the threshold should sit near the 95th pct.
+    clean = np.linspace(0.0, 0.99, 100)
+    t = calibrate_threshold(clean, far_alarm_target=0.05)
+    # At most ~5% of clean scores may exceed the threshold.
+    assert np.mean(clean >= t) <= 0.05 + 1e-9
+
+
+def test_psi_reference_bins_sum_to_one():
+    clean = np.linspace(0.0, 1.0, 50)
+    ref = psi_reference_bins(clean, n_bins=8)
+    assert len(ref["bin_edges"]) == 9
+    assert abs(sum(ref["expected_props"]) - 1.0) < 1e-9
